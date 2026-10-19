@@ -1,0 +1,27 @@
+CABRAS: partidas en la nube con Supabase
+========================================
+
+Sin configurar nada, la app funciona igual que siempre (todo en local).
+
+CONFIGURACIÓN (una vez)
+1) Supabase > SQL Editor: pega supabase.sql y pulsa Run (se puede repetir sin problema).
+2) Supabase > Authentication > Sign In / Providers:
+   - Email: activado. Desactiva "Confirm email" (el remitente gratuito tiene un límite
+     de correos muy bajo y dejaría a la gente sin entrar).
+   - Deja "Allow anonymous sign-ins" desactivado: desde la versión 3.0 hay que registrarse
+     para jugar (correo y contraseña). Cada cuenta ve y puede repetir sus propias partidas.
+3) Supabase > Settings > API Keys: copia la "Project URL" y la clave "publishable".
+4) index.html ya lleva la URL y la clave publishable de tu proyecto Cabras.
+5) Sube la carpeta (o el zip) a Netlify: Deploys > Drag and drop.
+
+SER ADMINISTRADOR (ver todas las partidas desde la app)
+- Crea tu cuenta desde la app (Crear cuenta). En Supabase > Authentication > Users
+  copia tu ID y ejecuta en el SQL Editor:
+     insert into public.admins (user_id) values ('TU-USER-ID') on conflict do nothing;
+- Desde entonces, en "Partidas guardadas" ves las de todo el mundo (marcadas "Otro usuario").
+  Las de los demás puedes verlas y repetirlas, no borrarlas.
+
+INFORME DESDE EL CHAT (n8n)
+- En n8n crea una credencial de tipo "Supabase API" con la Project URL y la clave "secret"
+  (Settings > API Keys). Con esa credencial se lee la vista informe_partidas, que la app no
+  puede ver. Avisa cuando esté creada y se monta el flujo para pedir informes desde el chat.
