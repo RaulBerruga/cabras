@@ -342,7 +342,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='3.0';
+const APP_VERSION='3.0.1';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -503,6 +503,7 @@ function applyUpdate(){
   }catch(e){go();}
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate();});
+setInterval(checkUpdate,5*60*1000); // también durante una partida larga
 
 /* undo */
 const UIKEYS=['hist','sound','teamsOpen','logOpen','setOpen'];
