@@ -374,14 +374,14 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.6';
+const APP_VERSION='4.7';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const app=document.getElementById('app');
 let busy=false, revealNext=false, lastHigh=null, hbFrom=null, confirming=null, view='home', keypad=false, keyBuf='', authMode='login', showPw=false, tab='mesa', savedFilter='all', celebrate=false;
 
-function fresh(){return{phase:'setup',title:'',mode:'wheel',pool:[],players:[],allNames:[],budget:100,round:0,wheelAngle:0,current:null,nextStart:0,ratings:{},rateIdx:0,log:[],hist:[],cloudId:null,ownerId:null,sound:true,teamsOpen:false,logOpen:false,setOpen:false,seq:1};}
+function fresh(){return{phase:'setup',title:'',mode:'wheel',reverseOn:true,pool:[],players:[],allNames:[],budget:100,round:0,wheelAngle:0,current:null,nextStart:0,ratings:{},rateIdx:0,log:[],hist:[],cloudId:null,ownerId:null,sound:true,teamsOpen:false,logOpen:false,setOpen:false,seq:1};}
 function load(){try{let r=localStorage.getItem(KEY);for(const k of OLDKEYS){if(!r)r=localStorage.getItem(k);}if(!r)return null;const o=JSON.parse(r);return(o&&o.phase)?o:null;}catch(e){return null;}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} scheduleSync();}
 let S=load()||fresh();
@@ -508,7 +508,7 @@ function repeatSaved(id){
   const e=row.estado, names=(e.allNames&&e.allNames.length)?e.allNames:(e.pool||[]).map(p=>p.name), players=(e.players||[]).map(p=>p.name);
   if(!names.length||players.length<2){toast('Esa partida no tiene listas completas');return;}
   if(cloudSaveable()&&dirty)flush();
-  S=Object.assign(fresh(),prefsOf(),{hist:[]}); S.seq=1000; S.title=''; S.budget=typeof e.budget==='number'?e.budget:100; S.mode='wheel';
+  S=Object.assign(fresh(),prefsOf(),{hist:[]}); S.seq=1000; S.title=''; S.budget=typeof e.budget==='number'?e.budget:100; S.mode='wheel'; S.reverseOn=e.reverseOn!==false;
   S.pool=names.map(n=>({id:uid(),name:n})); S.players=players.map(n=>({id:uid(),name:n,spent:0,won:[]})); S.phase='setup';
   view=null; confirming=null; save(); render(); window.scrollTo(0,0); toast('Listas cargadas, pulsa Empezar');
 }
@@ -694,7 +694,7 @@ function bidBox(){
     :`<p class="nobudget">No le quedan cabras para subir la puja.</p>`}
     <button type="button" class="pass" data-action="pass">${esc(p.name)} pasa</button>
     <p class="passline">${passline}</p>
-    ${untouched&&contenders(S).length>1?`<button type="button" class="link-felt" data-action="reverse">Nadie la quiere: puja inversa</button>`:''}
+    ${untouched&&S.reverseOn&&contenders(S).length>1?`<button type="button" class="link-felt" data-action="reverse">Nadie la quiere: puja inversa</button>`:''}
   </div>`;
 }
 function reverseBox(cur,p,l,min,can){
@@ -800,7 +800,7 @@ function viewRules(){
     <li>En su turno, cada pujador sube la puja o pasa. Quien pasa queda fuera de ese nombre, y la puja sigue en orden entre los que quedan.</li>
     <li>Cuando solo queda uno sin pasar, se lleva el nombre y paga las cabras de su puja, que desaparecen. Si pasan todos sin pujar, el nombre vuelve a la lista.</li>
     <li>El siguiente nombre lo abre quien va detrás del que abrió el anterior. Quien se queda a 0 cabras deja de pujar, pero sigue en la partida con su equipo.</li>
-    <li>Si quien abre no la quiere, puede declarar <b>puja inversa</b>: abre con al menos 1 cabra y cada uno paga por librarse subiendo la cantidad anterior. El primero que dice basta se la queda sin pagar; los demás pierden lo que pujaron.</li>
+    <li>Si la partida se juega con <b>puja inversa</b> y quien abre no la quiere, puede declararla: abre con al menos 1 cabra y cada uno paga por librarse subiendo la cantidad anterior. El primero que dice basta se la queda sin pagar; los demás pierden lo que pujaron.</li>
     <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 (con medios puntos) los equipos de los demás. Gana el equipo con mejor media.</li>
   </ol></div>
   <button type="button" class="ghost big" data-action="home">Volver</button>`;
@@ -827,8 +827,9 @@ function viewSetup(){
   <section class="card block in" style="--i:3">
     <div class="blockhead"><span class="num">3</span><h2>Reglas</h2></div>
     <div class="rules-row"><label>Cabras por pujador <input id="budget" type="number" min="0" step="1" value="${S.budget}" inputmode="numeric" aria-label="Cabras por pujador"></label></div>
+    <div class="rules-row"><span class="lbl">Puja inversa</span><div class="seg" role="group"><button type="button" data-action="reverse-on" data-on="1" class="${S.reverseOn?'on':''}">Sí</button><button type="button" data-action="reverse-on" data-on="0" class="${S.reverseOn?'':'on'}">No</button></div></div>
     <div class="rules-row"><span class="lbl">Sonidos</span><div class="seg" role="group"><button type="button" data-action="sound" data-on="1" class="${S.sound?'on':''}">Sí</button><button type="button" data-action="sound" data-on="0" class="${S.sound?'':'on'}">No</button></div></div>
-    <p class="hint" style="margin:6px 0 0">Con 0 cabras no hay límite. Quien se queda a 0 deja de pujar.</p>
+    <p class="hint" style="margin:6px 0 0">Con 0 cabras no hay límite. Quien se queda a 0 deja de pujar. Con puja inversa, quien abre puede pagar por librarse de un nombre que nadie quiere.</p>
   </section>
   ${empty?`<button type="button" class="link" data-action="sample">Probar con un ejemplo</button>`:askHTML('reset','Borrar todo','link')}
   <div class="cta"><button type="button" class="primary big start" data-action="start" ${ready?'':'disabled'}>${ready?'Empezar la partida':'Faltan nombres o pujadores'}</button></div>`;
@@ -848,7 +849,8 @@ function tabBodyHTML(){
       <p class="hint">Un pujador nuevo entra al final del turno con ${S.budget>0?plural(S.budget,'cabra','cabras'):'cabras sin límite'}.</p>
     </div>
     <div class="card"><label class="tlabel" for="gtitle">Nombre de la partida</label><input id="gtitle" type="text" value="${esc(S.title||'')}" maxlength="40" autocomplete="off"></div>
-    <div class="card"><div class="rules-row"><span class="lbl">Sonidos</span><div class="seg" role="group"><button type="button" data-action="sound" data-on="1" class="${S.sound?'on':''}">Sí</button><button type="button" data-action="sound" data-on="0" class="${S.sound?'':'on'}">No</button></div></div></div>
+    <div class="card"><div class="rules-row"><span class="lbl">Puja inversa</span><div class="seg" role="group"><button type="button" data-action="reverse-on" data-on="1" class="${S.reverseOn?'on':''}">Sí</button><button type="button" data-action="reverse-on" data-on="0" class="${S.reverseOn?'':'on'}">No</button></div></div>
+    <div class="rules-row"><span class="lbl">Sonidos</span><div class="seg" role="group"><button type="button" data-action="sound" data-on="1" class="${S.sound?'on':''}">Sí</button><button type="button" data-action="sound" data-on="0" class="${S.sound?'':'on'}">No</button></div></div></div>
     <div class="foot">${askHTML('finish','Terminar y valorar')}${askHTML('reset','Empezar de cero')}</div>
   </div>`;
   return `${stripHTML()}<section>${poolHTML()}</section>`;
@@ -1142,6 +1144,7 @@ app.addEventListener('click',e=>{
     case 'rm-player': set(s=>{s.players=s.players.filter(p=>p.id!==id);}); break;
     case 'up': case 'down': set(s=>{const i=s.players.findIndex(p=>p.id===id);const j=a==='up'?i-1:i+1;if(i<0||j<0||j>=s.players.length)return;[s.players[i],s.players[j]]=[s.players[j],s.players[i]];}); break;
     case 'sound': set(s=>{s.sound=b.dataset.on==='1';}); if(S.sound) snd.bid(); break;
+    case 'reverse-on': set(s=>{s.reverseOn=b.dataset.on==='1';}); break;
     case 'start': startGame(); break;
     /* play */
     case 'roll': if(S.phase==='pick') spinWheel(); break;
@@ -1155,7 +1158,7 @@ app.addEventListener('click',e=>{
       } break;
     case 'bidexact': if(keyBuf) placeBid(parseInt(keyBuf,10)); break;
     case 'pass': passTurn(); break;
-    case 'reverse': if(S.phase==='bid'&&S.current&&!S.current.reverse&&S.current.high===0&&!S.current.passed.length){set(s=>{pushHist();s.current.reverse=true;s.current.bids={};});toast('Puja inversa: se paga por librarse');} break;
+    case 'reverse': if(S.reverseOn&&S.phase==='bid'&&S.current&&!S.current.reverse&&S.current.high===0&&!S.current.passed.length){set(s=>{pushHist();s.current.reverse=true;s.current.bids={};});toast('Puja inversa: se paga por librarse');} break;
     case 'next': nextName(); break;
     case 'undo': undo(); break;
     case 'finish': confirming=null; set(s=>{pushHist();s.current=null;s.phase='rate';s.ratings={};s.rateIdx=0;}); window.scrollTo(0,0); break;
