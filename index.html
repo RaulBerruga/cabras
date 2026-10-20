@@ -104,6 +104,15 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .bar-mid{text-align:center;min-width:0;flex:1;display:flex;flex-direction:column;align-items:center}
 .bar-title{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
 .bar-sub{font-size:13px;color:var(--mute)}
+.sync{display:inline-flex;align-items:center;gap:6px;background:transparent;padding:2px 6px;font-size:12px;font-weight:600;color:var(--mute);border-radius:999px}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--mute);flex:none}
+.sync.saved i{background:var(--felt-edge)}
+.sync.saving i{background:var(--gold);animation:blink 1s infinite}
+.sync.offline i{background:var(--gold)}
+.sync.error{color:var(--red)}
+.sync.error i{background:var(--red)}
+@keyframes blink{50%{opacity:.3}}
+.syncrow{display:flex;justify-content:center;margin:-4px 0 10px}
 .pring{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mute)}
 .pring svg{width:26px;height:26px;transform:rotate(-90deg)}
 .pring circle{fill:none;stroke-width:3.5}
@@ -352,7 +361,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.1';
+const APP_VERSION='4.2';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -401,7 +410,7 @@ function avsHTML(names,cls){return `<span class="avs">${names.slice(0,5).map((n,
    Con ellas, jugar requiere cuenta y todo se guarda en la nube. Sin ellas, la app funciona solo en local. */
 const CLOUD={url:'https://fovuhtslwumzybptojcj.supabase.co',key:'sb_publishable_ZsC5-4gZJ5DHsMNPQvHCuw_Y14j9lie'};
 const cloudConfigured=/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(CLOUD.url)&&!/PEGA_AQUI/.test(CLOUD.key);
-let sb=null,user=null,authReady=!cloudConfigured,cloudErr='',syncTimer=null,dirty=false,saved=null,savedBusy=false,savedFor=null,authBusy=false;
+let sb=null,user=null,authReady=!cloudConfigured,cloudErr='',syncTimer=null,dirty=false,saved=null,savedBusy=false,savedFor=null,savedAt=0,authBusy=false,syncState='idle',syncMsg='',syncAt=0,accessToken=null;
 function gate(){return cloudConfigured&&!user;}
 function newId(){try{return crypto.randomUUID();}catch(e){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);});}}
 function cloudInit(){
@@ -414,8 +423,8 @@ function cloudInit(){
     if(changed){saved=null;savedFor=null;if(user){dirty=true;flush();}}
     render();
   };
-  try{sb.auth.getSession().then(r=>apply(r&&r.data&&r.data.session?r.data.session.user:null)).catch(()=>apply(null));}catch(e){apply(null);}
-  try{sb.auth.onAuthStateChange((ev,sess)=>{const u=sess?sess.user:null;if((u&&u.id)!==(user&&user.id))apply(u);});}catch(e){}
+  try{sb.auth.getSession().then(r=>{const s=r&&r.data&&r.data.session;accessToken=s?s.access_token:null;apply(s?s.user:null);}).catch(()=>apply(null));}catch(e){apply(null);}
+  try{sb.auth.onAuthStateChange((ev,sess)=>{accessToken=sess?sess.access_token:null;const u=sess?sess.user:null;if((u&&u.id)!==(user&&user.id))apply(u);});}catch(e){}
 }
 function cloudBoot(){
   if(!cloudConfigured) return;
@@ -428,16 +437,40 @@ function cloudBoot(){
 function cloudSaveable(){return !!(S.cloudId&&(inProgress()||S.phase==='end'));}
 function scheduleSync(){if(!sb||!user||!cloudSaveable())return;dirty=true;clearTimeout(syncTimer);syncTimer=setTimeout(flush,1200);}
 function resumenData(){return results().map((r,i)=>({puesto:i+1,nombre:r.p.name,media:Math.round(r.avg*10)/10,equipo:r.p.won,gastadas:r.p.spent}));}
+function rowNow(){return {id:S.cloudId,fase:S.phase,estado:JSON.parse(snap()),resumen:S.phase==='end'?resumenData():null,actualizada:new Date().toISOString()};}
+function setSync(st,msg){const changed=st!==syncState||msg!==syncMsg;syncState=st;syncMsg=msg||'';if(changed){const el=document.getElementById('sync');if(el){el.outerHTML=syncHTML();}}}
 async function flush(){
   if(!sb||!user||!dirty||!cloudSaveable())return;
   dirty=false; clearTimeout(syncTimer);
-  const row={id:S.cloudId,fase:S.phase,estado:JSON.parse(snap()),resumen:S.phase==='end'?resumenData():null,actualizada:new Date().toISOString()};
-  try{const r=await sb.from('partidas').upsert(row);if(r&&r.error)throw r.error;cloudErr='';}
-  catch(e){dirty=true;cloudErr=authMsg(e);}
+  const row=rowNow(); setSync('saving','');
+  try{
+    const r=await sb.from('partidas').upsert(row); if(r&&r.error)throw r.error;
+    cloudErr=''; syncAt=Date.now(); setSync('saved','');
+    if(saved){const i=saved.findIndex(x=>x.id===row.id);const merged=Object.assign({user_id:user.id},saved[i]||{},row);if(i>=0)saved[i]=merged;else saved.unshift(merged);}
+  }catch(e){
+    dirty=true; cloudErr=authMsg(e);
+    const off=!navigator.onLine||/conexión/i.test(cloudErr);
+    setSync(off?'offline':'error',cloudErr);
+    if(!off&&!flush.warned){flush.warned=true;toast('No se ha podido guardar en la nube');}
+  }
+}
+// last chance when the app goes to the background or closes: a keepalive request with the session token
+function flushOnExit(){
+  if(!dirty||!user||!accessToken||!cloudSaveable())return;
+  try{
+    fetch(CLOUD.url.replace(/\/$/,'')+'/rest/v1/partidas?on_conflict=id',{method:'POST',keepalive:true,headers:{'apikey':CLOUD.key,'Authorization':'Bearer '+accessToken,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rowNow())}).then(r=>{if(r.ok){dirty=false;syncAt=Date.now();}}).catch(()=>{});
+  }catch(e){}
+}
+window.addEventListener('pagehide',flushOnExit);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushOnExit();});
+function syncHTML(){
+  if(!cloudConfigured||!user||!cloudSaveable()) return '<span id="sync"></span>';
+  const m={saving:['saving','Guardando…'],saved:['saved','Guardado en la nube'],offline:['offline','Sin conexión: se guardará al volver'],error:['error','No guardado: '+syncMsg+'. Toca para reintentar']}[syncState]||['idle',dirty?'Cambios sin guardar':'Guardado en la nube'];
+  return `<button type="button" id="sync" class="sync ${m[0]}" data-action="retry-sync"><i></i>${esc(m[1])}</button>`;
 }
 async function loadSaved(){
   if(!sb||!user||savedBusy)return; savedBusy=true; render();
-  try{const r=await sb.from('partidas').select('id,user_id,fase,actualizada,estado,resumen').order('actualizada',{ascending:false}).limit(100);if(r.error)throw r.error;saved=r.data||[];savedFor=user.id;cloudErr='';}
+  try{const r=await sb.from('partidas').select('id,user_id,fase,actualizada,estado,resumen').order('actualizada',{ascending:false}).limit(100);if(r.error)throw r.error;saved=r.data||[];savedFor=user.id;savedAt=Date.now();cloudErr='';}
   catch(e){saved=[];cloudErr=authMsg(e);}
   savedBusy=false; render();
 }
@@ -710,13 +743,13 @@ function viewHome(){
   const nSaved=(saved||[]).length;
   let recent='';
   if(cloudConfigured&&user){
-    if(saved===null&&!savedBusy&&sb) setTimeout(loadSaved,0);
+    if((saved===null||savedFor!==user.id||Date.now()-savedAt>30000)&&!savedBusy&&sb) setTimeout(loadSaved,0);
     const rows=(saved||[]).filter(x=>x.id!==S.cloudId).slice(0,3);
     recent=`<p class="eyebrow">Recientes</p><div class="card in" style="--i:4">${savedBusy&&saved===null?`<p class="hint" style="margin:0">Cargando…</p>`:rows.length?`<ul class="recent">${rows.map(x=>{const e=x.estado||{},ps=(e.players||[]).map(p=>p.name);const liveX=['pick','bid','sold','rate'].includes(x.fase);const w=x.resumen&&x.resumen[0]&&x.resumen[0].media>0?`${esc(x.resumen[0].nombre)} gana con ${fmtAvg(x.resumen[0].media)}`:(liveX?'En curso':'Terminada');return `<li>${avsHTML(ps,'sm')}<span class="ri"><span class="rt">${esc(ps.join(', '))||'Sin pujadores'}</span><span class="rs">${fmtWhen(x.actualizada)}, ${w}</span></span><button type="button" class="ghost" data-action="${liveX?'open-saved':'repeat-saved'}" data-id="${x.id}">${liveX?'Abrir':'Repetir'}</button></li>`;}).join('')}</ul>`:`<p class="hint" style="margin:0">${cloudErr?esc(cloudErr):'Aquí aparecerán tus partidas. Se guardan solas al jugar.'}</p>`}</div>`;
   }
   return `<div class="home">
   <section class="hero in">${GOAT}${who}<h1>Cabras</h1><p>Una subasta de nombres por turnos. Uno lleva la mesa, los demás pujan de palabra.</p></section>
-  ${cont}
+  ${cont}${cont&&cloudConfigured&&user?`<div class="syncrow">${syncHTML()}</div>`:''}
   <div class="in" style="--i:2">${live?askHTML('new','Nueva partida','ghost big'):`<button type="button" class="primary big" data-action="new">Nueva partida</button>`}</div>
   <div class="tiles in" style="--i:3">
     <button type="button" class="tile" data-action="rules"><span class="ib">${ICON.book}</span><b>Cómo se juega</b><small>Las reglas en seis líneas</small></button>
@@ -806,7 +839,7 @@ function viewPlay(){
       <div class="stage-actions"><button type="button" class="primary pill" data-action="next">${over?'Valorar los equipos':'Siguiente nombre'}</button></div>`;
   }
   const undoBtn=`<button type="button" class="icon-btn" data-action="undo" ${S.hist.length?'':'disabled'} aria-label="Deshacer">${ICON.undo}</button>`;
-  return `${barHTML(`Ronda ${S.round+1}`,'',{right:undoBtn,extra:total?ringHTML(sold,total):''})}
+  return `${barHTML(`Ronda ${S.round+1}`,syncHTML(),{right:undoBtn,extra:total?ringHTML(sold,total):''})}
   <section class="stage">${stage}</section>
   ${tabsHTML()}
   ${tabBodyHTML()}`;
@@ -817,7 +850,8 @@ function viewRate(){
   const targets=S.players.filter(p=>p.id!==rater.id);
   const done=rateDone(), last=S.rateIdx===S.players.length-1;
   const next=last?null:S.players[S.rateIdx+1];
-  return `${barHTML('Valoración',`${S.rateIdx+1} de ${S.players.length}`)}
+  return `${barHTML('Valoración',`${S.rateIdx+1} de ${S.players.length}`,{extra:''})}
+  ${cloudConfigured&&user?`<div class="syncrow">${syncHTML()}</div>`:''}
   <div class="progress" aria-hidden="true"><i style="width:${(S.rateIdx/S.players.length)*100}%"></i></div>
   <div class="rhead">${avHTML(rater.name,S.rateIdx,'lg')}<p class="lead" style="margin:0">Pregúntale a <b>${esc(rater.name)}</b> qué nota, del 1 al 10, le pone al equipo de cada uno de los demás.</p></div>
   <section class="card own"><div class="pname">Equipo de ${esc(rater.name)}</div><div class="won">${teamHTML(rater)}</div></section>
@@ -858,6 +892,7 @@ function viewEnd(){
   const tie=rs.length>1&&rs[1].avg===top.avg;
   const lead=top&&top.avg>0?(tie?`Empate en cabeza, con un ${fmtAvg(top.avg)} de media.`:`El equipo de ${esc(top.p.name)} es el mejor valorado, con un ${fmtAvg(top.avg)} de media.`):'Así han quedado los equipos.';
   return `${barHTML('Recuento','')}
+  ${cloudConfigured&&user?`<div class="syncrow">${syncHTML()}</div>`:''}
   <p class="lead">${lead}</p>
   ${podiumHTML(rs)}
   <ol class="ranking">${rs.map((r,i)=>`<li class="card${r.avg>0&&r.avg===top.avg?' top':''}" style="--i:${i}">
@@ -1019,7 +1054,8 @@ app.addEventListener('click',e=>{
     case 'authmode': authMode=b.dataset.m; cloudErr=''; render(); break;
     case 'showpw': {showPw=!showPw; const f=b.closest('form'); const em=f&&f.elements.email.value, pw=f&&f.elements.pass.value; render(()=>{const nf=app.querySelector('form[data-form="auth"]'); if(nf){nf.elements.email.value=em||'';nf.elements.pass.value=pw||'';}});} break;
     case 'logout': doLogout(); break;
-    case 'saved': view='saved'; confirming=null; render(); window.scrollTo(0,0); if(saved===null||savedFor!==(user&&user.id)) loadSaved(); break;
+    case 'saved': view='saved'; confirming=null; render(); window.scrollTo(0,0); loadSaved(); break;
+    case 'retry-sync': if(dirty){flush();}else{setSync('saved','');} break;
     case 'open-saved': openSaved(b.dataset.id); break;
     case 'repeat-saved': repeatSaved(b.dataset.id); break;
     case 'del-saved': confirming=null; deleteSaved(b.dataset.id); break;
