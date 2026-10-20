@@ -169,6 +169,8 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .blockhead{display:flex;align-items:center;gap:10px;margin:0 0 10px}
 .blockhead .num{width:26px;height:26px;border-radius:50%;background:var(--felt);color:var(--chip);display:grid;place-items:center;font-size:13px;font-weight:800;flex:none}
 .count{font-size:13px;color:var(--mute);font-weight:600;margin-left:auto}
+.tlabel{display:block;font-weight:700;font-size:15px;margin:0 0 6px;text-align:center}
+.bsub{margin-right:8px}
 .adder{display:flex;gap:8px}
 .adder input{flex:1}
 .chips{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
@@ -372,14 +374,14 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.5';
+const APP_VERSION='4.6';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const app=document.getElementById('app');
 let busy=false, revealNext=false, lastHigh=null, hbFrom=null, confirming=null, view='home', keypad=false, keyBuf='', authMode='login', showPw=false, tab='mesa', savedFilter='all', celebrate=false;
 
-function fresh(){return{phase:'setup',mode:'wheel',pool:[],players:[],allNames:[],budget:100,round:0,wheelAngle:0,current:null,nextStart:0,ratings:{},rateIdx:0,log:[],hist:[],cloudId:null,ownerId:null,sound:true,teamsOpen:false,logOpen:false,setOpen:false,seq:1};}
+function fresh(){return{phase:'setup',title:'',mode:'wheel',pool:[],players:[],allNames:[],budget:100,round:0,wheelAngle:0,current:null,nextStart:0,ratings:{},rateIdx:0,log:[],hist:[],cloudId:null,ownerId:null,sound:true,teamsOpen:false,logOpen:false,setOpen:false,seq:1};}
 function load(){try{let r=localStorage.getItem(KEY);for(const k of OLDKEYS){if(!r)r=localStorage.getItem(k);}if(!r)return null;const o=JSON.parse(r);return(o&&o.phase)?o:null;}catch(e){return null;}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} scheduleSync();}
 let S=load()||fresh();
@@ -409,6 +411,10 @@ function nextInAuction(s,from){const n=s.players.length;for(let k=1;k<=n;k++){co
 function plural(n,s,p){return n+' '+(n===1?s:p);}
 function teamHTML(p){return p.won.length?p.won.map(w=>`${esc(w.name)} (${w.reverse?'inversa':w.price})`).join(', '):'Sin nadie todavía';}
 function fmtAvg(v){return v.toFixed(1).replace('.',',');}
+function gameCount(){try{return parseInt(localStorage.getItem('cabras-gamecount')||'0',10)||0;}catch(e){return 0;}}
+function nextGameNumber(){const cloud=(saved&&user)?saved.filter(x=>!user||!x.user_id||x.user_id===user.id).length:0;return Math.max(cloud,gameCount())+1;}
+function defaultTitle(){return 'Partida '+nextGameNumber();}
+function titleOf(e){return (e&&e.title)||'';}
 function inProgress(){return ['pick','bid','sold','rate'].includes(S.phase);}
 function inGame(){return ['pick','bid','sold'].includes(S.phase)&&!view;}
 const PAL=[['#2E7A5E','#F3E9CF'],['#D1413A','#F3E9CF'],['#E2B55A','#2A1E07'],['#3B6EA8','#F3E9CF'],['#8E4EA3','#F3E9CF'],['#D97A2B','#2A1E07'],['#2A9D8F','#F3E9CF'],['#B5485D','#F3E9CF']];
@@ -502,7 +508,7 @@ function repeatSaved(id){
   const e=row.estado, names=(e.allNames&&e.allNames.length)?e.allNames:(e.pool||[]).map(p=>p.name), players=(e.players||[]).map(p=>p.name);
   if(!names.length||players.length<2){toast('Esa partida no tiene listas completas');return;}
   if(cloudSaveable()&&dirty)flush();
-  S=Object.assign(fresh(),prefsOf(),{hist:[]}); S.seq=1000; S.budget=typeof e.budget==='number'?e.budget:100; S.mode='wheel';
+  S=Object.assign(fresh(),prefsOf(),{hist:[]}); S.seq=1000; S.title=''; S.budget=typeof e.budget==='number'?e.budget:100; S.mode='wheel';
   S.pool=names.map(n=>({id:uid(),name:n})); S.players=players.map(n=>({id:uid(),name:n,spent:0,won:[]})); S.phase='setup';
   view=null; confirming=null; save(); render(); window.scrollTo(0,0); toast('Listas cargadas, pulsa Empezar');
 }
@@ -765,14 +771,14 @@ function viewHome(){
   const live=inProgress();
   const names=S.players.map(p=>p.name);
   const who=user?`<div class="who"><span class="ib">${ICON.user}</span><span>${esc(user.email||'')}</span></div>`:'';
-  const cont=live?`<button type="button" class="cont in" style="--i:1" data-action="continue">${avsHTML(names,'sm')}<span class="ci"><span class="ct">Partida en curso</span><br><span class="cs">${S.phase==='rate'?'En las valoraciones':`Ronda ${S.round+1}, ${plural(S.pool.length,'nombre','nombres')} por salir`}</span></span><span class="go">${ICON.go}</span></button>`
-    :S.phase==='end'?`<button type="button" class="cont in" style="--i:1" data-action="continue">${avsHTML(names,'sm')}<span class="ci"><span class="ct">Último recuento</span><br><span class="cs">${esc(names.join(', '))}</span></span><span class="go">${ICON.go}</span></button>`:'';
+  const cont=live?`<button type="button" class="cont in" style="--i:1" data-action="continue">${avsHTML(names,'sm')}<span class="ci"><span class="ct">${esc(S.title||'Partida en curso')}</span><br><span class="cs">${S.phase==='rate'?'En las valoraciones':`En curso: ronda ${S.round+1}, ${plural(S.pool.length,'nombre','nombres')} por salir`}</span></span><span class="go">${ICON.go}</span></button>`
+    :S.phase==='end'?`<button type="button" class="cont in" style="--i:1" data-action="continue">${avsHTML(names,'sm')}<span class="ci"><span class="ct">${esc(S.title||'Último recuento')}</span><br><span class="cs">Recuento: ${esc(names.join(', '))}</span></span><span class="go">${ICON.go}</span></button>`:'';
   const nSaved=(saved||[]).length;
   let recent='';
   if(cloudConfigured&&user){
     if((saved===null||savedFor!==user.id||Date.now()-savedAt>30000)&&!savedBusy&&sb) setTimeout(loadSaved,0);
     const rows=(saved||[]).filter(x=>x.id!==S.cloudId).slice(0,3);
-    recent=`<p class="eyebrow">Recientes</p><div class="card in" style="--i:4">${savedBusy&&saved===null?`<p class="hint" style="margin:0">Cargando…</p>`:rows.length?`<ul class="recent">${rows.map(x=>{const e=x.estado||{},ps=(e.players||[]).map(p=>p.name);const liveX=['pick','bid','sold','rate'].includes(x.fase);const w=x.resumen&&x.resumen[0]&&x.resumen[0].media>0?`${esc(x.resumen[0].nombre)} gana con ${fmtAvg(x.resumen[0].media)}`:(liveX?'En curso':'Terminada');return `<li>${avsHTML(ps,'sm')}<span class="ri"><span class="rt">${esc(ps.join(', '))||'Sin pujadores'}</span><span class="rs">${fmtWhen(x.actualizada)}, ${w}</span></span><button type="button" class="ghost" data-action="${liveX?'open-saved':'repeat-saved'}" data-id="${x.id}">${liveX?'Abrir':'Repetir'}</button></li>`;}).join('')}</ul>`:`<p class="hint" style="margin:0">${cloudErr?esc(cloudErr):'Aquí aparecerán tus partidas. Se guardan solas al jugar.'}</p>`}</div>`;
+    recent=`<p class="eyebrow">Recientes</p><div class="card in" style="--i:4">${savedBusy&&saved===null?`<p class="hint" style="margin:0">Cargando…</p>`:rows.length?`<ul class="recent">${rows.map(x=>{const e=x.estado||{},ps=(e.players||[]).map(p=>p.name);const liveX=['pick','bid','sold','rate'].includes(x.fase);const w=x.resumen&&x.resumen[0]&&x.resumen[0].media>0?`${esc(x.resumen[0].nombre)} gana con ${fmtAvg(x.resumen[0].media)}`:(liveX?'En curso':'Terminada');return `<li>${avsHTML(ps,'sm')}<span class="ri"><span class="rt">${esc(titleOf(e)||ps.join(', ')||'Partida')}</span><span class="rs">${fmtWhen(x.actualizada)}, ${w}</span></span><button type="button" class="ghost" data-action="${liveX?'open-saved':'repeat-saved'}" data-id="${x.id}">${liveX?'Abrir':'Repetir'}</button></li>`;}).join('')}</ul>`:`<p class="hint" style="margin:0">${cloudErr?esc(cloudErr):'Aquí aparecerán tus partidas. Se guardan solas al jugar.'}</p>`}</div>`;
   }
   return `<div class="home">
   <section class="hero in">${GOAT}${who}<h1>Cabras</h1><p>Una subasta de nombres por turnos. Uno lleva la mesa, los demás pujan de palabra.</p></section>
@@ -804,16 +810,21 @@ function viewSetup(){
   const empty=!S.pool.length&&!S.players.length;
   return `${barHTML('Nueva partida','',{back:'home'})}
   <section class="card block in" style="--i:0">
+    <label class="tlabel" for="gtitle">Nombre de la partida</label>
+    <input id="gtitle" type="text" value="${esc(S.title||'')}" placeholder="${esc(defaultTitle())}" autocomplete="off" maxlength="40">
+    <p class="hint">Si lo dejas vacío, se llamará ${esc(defaultTitle())}.</p>
+  </section>
+  <section class="card block in" style="--i:1">
     <div class="blockhead"><span class="num">1</span><h2>Nombres</h2><span class="count">${S.pool.length?plural(S.pool.length,'nombre','nombres'):''}</span></div>
     <form class="adder" data-form="pool"><input type="text" placeholder="Marta, Pablo, Lucía" autocomplete="off" aria-label="Nombres"><button type="submit" class="primary">Añadir</button></form>
     ${S.pool.length?`<ul class="chips">${S.pool.map(p=>`<li class="chip">${esc(p.name)}<button type="button" data-action="rm-pool" data-id="${p.id}" aria-label="Quitar a ${esc(p.name)}">×</button></li>`).join('')}</ul>`:`<p class="hint">Los que saldrán a subasta. Puedes escribir varios separados por comas.</p>`}
   </section>
-  <section class="card block in" style="--i:1">
+  <section class="card block in" style="--i:2">
     <div class="blockhead"><span class="num">2</span><h2>Pujadores</h2><span class="count">${S.players.length?plural(S.players.length,'pujador','pujadores'):''}</span></div>
     <form class="adder" data-form="players"><input type="text" placeholder="Álvaro, Nerea, Jorge" autocomplete="off" aria-label="Pujadores"><button type="submit" class="primary">Añadir</button></form>
     ${S.players.length?`<ol class="plist">${S.players.map((p,i)=>`<li>${avHTML(p.name,i,'sm')}<span class="nm">${esc(p.name)}</span><button type="button" class="icon" data-action="up" data-id="${p.id}" ${i===0?'disabled':''} aria-label="Subir">↑</button><button type="button" class="icon" data-action="down" data-id="${p.id}" ${i===S.players.length-1?'disabled':''} aria-label="Bajar">↓</button><button type="button" class="icon" data-action="rm-player" data-id="${p.id}" aria-label="Quitar">×</button></li>`).join('')}</ol>`:`<p class="hint">Pujan por turnos en este orden. Hacen falta al menos dos.</p>`}
   </section>
-  <section class="card block in" style="--i:2">
+  <section class="card block in" style="--i:3">
     <div class="blockhead"><span class="num">3</span><h2>Reglas</h2></div>
     <div class="rules-row"><label>Cabras por pujador <input id="budget" type="number" min="0" step="1" value="${S.budget}" inputmode="numeric" aria-label="Cabras por pujador"></label></div>
     <div class="rules-row"><span class="lbl">Sonidos</span><div class="seg" role="group"><button type="button" data-action="sound" data-on="1" class="${S.sound?'on':''}">Sí</button><button type="button" data-action="sound" data-on="0" class="${S.sound?'':'on'}">No</button></div></div>
@@ -836,6 +847,7 @@ function tabBodyHTML(){
       <form class="adder" data-form="addplayer" style="margin-top:10px"><input type="text" placeholder="Nuevo pujador" autocomplete="off" aria-label="Nuevo pujador"><button type="submit">Añadir</button></form>
       <p class="hint">Un pujador nuevo entra al final del turno con ${S.budget>0?plural(S.budget,'cabra','cabras'):'cabras sin límite'}.</p>
     </div>
+    <div class="card"><label class="tlabel" for="gtitle">Nombre de la partida</label><input id="gtitle" type="text" value="${esc(S.title||'')}" maxlength="40" autocomplete="off"></div>
     <div class="card"><div class="rules-row"><span class="lbl">Sonidos</span><div class="seg" role="group"><button type="button" data-action="sound" data-on="1" class="${S.sound?'on':''}">Sí</button><button type="button" data-action="sound" data-on="0" class="${S.sound?'':'on'}">No</button></div></div></div>
     <div class="foot">${askHTML('finish','Terminar y valorar')}${askHTML('reset','Empezar de cero')}</div>
   </div>`;
@@ -867,7 +879,7 @@ function viewPlay(){
       <div class="stage-actions"><button type="button" class="primary pill" data-action="next">${over?'Valorar los equipos':'Siguiente nombre'}</button></div>`;
   }
   const undoBtn=`<button type="button" class="icon-btn" data-action="undo" ${S.hist.length?'':'disabled'} aria-label="Deshacer">${ICON.undo}</button>`;
-  return `${barHTML(`Ronda ${S.round+1}`,syncHTML(),{right:undoBtn,extra:total?ringHTML(sold,total):''})}
+  return `${barHTML(esc(S.title||`Ronda ${S.round+1}`),`<span class="bsub">Ronda ${S.round+1}</span>${syncHTML()}`,{right:undoBtn,extra:total?ringHTML(sold,total):''})}
   <section class="stage">${stage}</section>
   ${tabsHTML()}
   ${tabBodyHTML()}`;
@@ -959,7 +971,7 @@ function viewSaved(){
     const win=x.resumen&&x.resumen[0]&&x.resumen[0].media>0?`Mejor equipo: ${esc(x.resumen[0].nombre)} (${fmtAvg(x.resumen[0].media)})`:(live(x)?`${sold} de ${total} vendidos`:'Terminada sin valorar');
     const cur=S.cloudId===x.id, mine=!user||!x.user_id||x.user_id===user.id;
     return `<li class="in" style="--i:${Math.min(i,6)}"><div class="sh">${avsHTML(ps,'sm')}<span class="when">${fmtWhen(x.actualizada)}</span><span class="tag${live(x)?' live':''}">${live(x)?'En curso':'Terminada'}</span>${cur?'<span class="tag">Esta</span>':''}${mine?'':'<span class="tag">Otro usuario</span>'}</div>
-      <div class="who">${ps.map(esc).join(', ')||'Sin pujadores'}</div><div class="what">${win}</div>
+      <div class="who">${esc(titleOf(e)||'Partida')}</div><div class="what">${ps.map(esc).join(', ')||'Sin pujadores'}</div><div class="what">${win}</div>
       <div class="acts">${confirming==='del:'+x.id?confirmHTML('del-saved','Se borra de la nube.','Sí, borrar').replace('data-action="del-saved"',`data-action="del-saved" data-id="${x.id}"`):`<button type="button" class="primary" data-action="open-saved" data-id="${x.id}">${cur?'Continuar':(live(x)?'Abrir':'Ver')}</button><button type="button" class="ghost" data-action="repeat-saved" data-id="${x.id}">Repetir</button>${mine?`<button type="button" class="ghost" data-action="ask" data-what="del:${x.id}">Borrar</button>`:''}`}</div></li>`;
   }).join('')}</ul>`;
   return `${barHTML('Partidas',esc(user?user.email||'':''),{back:'home'})}${filters}${list}
@@ -992,7 +1004,7 @@ function doEdit(){view=null;set(s=>{restoreLists(s);s.phase='setup';});window.sc
 function startGame(){
   if(S.pool.length<1||S.players.length<2) return;
   tab='mesa';
-  set(s=>{s.allNames=s.pool.map(p=>p.name);s.players.forEach(p=>{p.spent=0;p.won=[];});s.round=0;s.nextStart=0;s.current=null;s.log=[];s.hist=[];s.ratings={};s.rateIdx=0;s.cloudId=newId();s.ownerId=user?user.id:null;s.phase='pick';});
+  set(s=>{if(!s.title||!s.title.trim())s.title=defaultTitle();s.allNames=s.pool.map(p=>p.name);s.players.forEach(p=>{p.spent=0;p.won=[];});s.round=0;s.nextStart=0;s.current=null;s.log=[];s.hist=[];s.ratings={};s.rateIdx=0;s.cloudId=newId();s.ownerId=user?user.id:null;s.phase='pick';try{localStorage.setItem('cabras-gamecount',String(gameCount()+1));}catch(e){}});
   window.scrollTo(0,0);
 }
 function startBidding(i,extra){
@@ -1090,7 +1102,7 @@ function spinWheel(){
 }
 function summaryText(){
   const rs=results();
-  return 'Cabras, recuento\n'+rs.map((r,i)=>`${i+1}. ${r.p.name}: ${fmtAvg(r.avg)} de media. ${r.p.won.map(w=>`${w.name} (${w.price})`).join(', ')||'sin fichajes'}`).join('\n');
+  return (S.title||'Cabras')+', recuento\n'+rs.map((r,i)=>`${i+1}. ${r.p.name}: ${fmtAvg(r.avg)} de media. ${r.p.won.map(w=>`${w.name} (${w.price})`).join(', ')||'sin fichajes'}`).join('\n');
 }
 function share(){
   const t=summaryText();
@@ -1111,7 +1123,7 @@ app.addEventListener('click',e=>{
     case 'home': view='home'; confirming=null; render(); window.scrollTo(0,0); break;
     case 'rules': view='rules'; render(); window.scrollTo(0,0); break;
     case 'continue': view=null; render(); window.scrollTo(0,0); break;
-    case 'new': view=null; confirming=null; set(s=>{restoreLists(s);s.phase='setup';}); window.scrollTo(0,0); break;
+    case 'new': view=null; confirming=null; set(s=>{restoreLists(s);s.title='';s.phase='setup';}); window.scrollTo(0,0); break;
     case 'retry': authReady=false; render(); cloudBoot(); break;
     case 'authmode': authMode=b.dataset.m; cloudErr=''; render(); break;
     case 'showpw': {showPw=!showPw; const f=b.closest('form'); const em=f&&f.elements.email.value, pw=f&&f.elements.pass.value; render(()=>{const nf=app.querySelector('form[data-form="auth"]'); if(nf){nf.elements.email.value=em||'';nf.elements.pass.value=pw||'';}});} break;
@@ -1159,7 +1171,7 @@ app.addEventListener('click',e=>{
     case 'rate-next': if(S.phase==='rate'&&rateDone()){set(s=>{if(s.rateIdx>=s.players.length-1){s.phase='end';celebrate=true;}else{s.rateIdx++;}});window.scrollTo(0,0);} break;
     case 'rate-prev': if(S.phase==='rate'&&S.rateIdx>0){set(s=>{s.rateIdx--;});window.scrollTo(0,0);} break;
     case 'rate-again': set(s=>{s.ratings={};s.rateIdx=0;s.phase='rate';}); window.scrollTo(0,0); break;
-    case 'again': tab='mesa'; set(s=>{restoreLists(s);s.cloudId=newId();s.ownerId=user?user.id:null;s.phase='pick';}); window.scrollTo(0,0); break;
+    case 'again': tab='mesa'; set(s=>{restoreLists(s);s.title=defaultTitle();s.cloudId=newId();s.ownerId=user?user.id:null;s.phase='pick';try{localStorage.setItem('cabras-gamecount',String(gameCount()+1));}catch(e){}}); window.scrollTo(0,0); break;
     case 'share': share(); break;
     /* confirmations */
     case 'ask': confirming=b.dataset.what; if(confirming==='edit'&&!inProgress()){doEdit();}else{render();} break;
@@ -1183,6 +1195,7 @@ app.addEventListener('submit',e=>{
 });
 app.addEventListener('change',e=>{
   if(e.target.id==='budget'){S.budget=Math.max(0,parseInt(e.target.value,10)||0);save();}
+  if(e.target.id==='gtitle'){S.title=e.target.value.trim().slice(0,40);save();}
 });
 app.addEventListener('toggle',e=>{
   const k=e.target.dataset&&e.target.dataset.fold; if(k){S[k]=e.target.open;save();}
