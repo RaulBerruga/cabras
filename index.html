@@ -215,6 +215,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 
 /* bidding */
 .bidbox{margin-top:12px;padding-top:12px;border-top:1px solid var(--chip-line)}
+.bidbox.reverse{background:rgba(209,65,58,.12);margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;border-top-color:rgba(209,65,58,.35)}
 .highbid{display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap}
 .hb-amt{font-size:50px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;display:inline-block}
 .hb-amt.faint{opacity:.4}
@@ -365,7 +366,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.3';
+const APP_VERSION='4.4';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -400,7 +401,7 @@ function firstAliveFrom(i0){const n=S.players.length;for(let k=0;k<n;k++){const 
 function contenders(s){return s.players.filter(p=>alive(p)&&!s.current.passed.includes(p.id));}
 function nextInAuction(s,from){const n=s.players.length;for(let k=1;k<=n;k++){const i=(from+k)%n;const p=s.players[i];if(alive(p)&&!s.current.passed.includes(p.id))return i;}return -1;}
 function plural(n,s,p){return n+' '+(n===1?s:p);}
-function teamHTML(p){return p.won.length?p.won.map(w=>`${esc(w.name)} (${w.price})`).join(', '):'Sin nadie todavía';}
+function teamHTML(p){return p.won.length?p.won.map(w=>`${esc(w.name)} (${w.reverse?'inversa':w.price})`).join(', '):'Sin nadie todavía';}
 function fmtAvg(v){return v.toFixed(1).replace('.',',');}
 function inProgress(){return ['pick','bid','sold','rate'].includes(S.phase);}
 function inGame(){return ['pick','bid','sold'].includes(S.phase)&&!view;}
@@ -662,6 +663,8 @@ function keypadHTML(min,l){
 }
 function bidBox(){
   const cur=S.current, p=S.players[cur.turn], l=left(p), min=cur.high+1, can=min<=l;
+  if(cur.reverse) return reverseBox(cur,p,l,min,can);
+  const untouched=cur.high===0&&!cur.passed.length;
   const pop=(lastHigh!==null&&lastHigh!==cur.high&&cur.high>0)?' pop':''; hbFrom=pop?lastHigh:null; lastHigh=cur.high;
   const hb=cur.highBidder
     ?`<div class="highbid"><span class="hb-amt${pop}"${pop?` data-from="${hbFrom}" data-to="${cur.high}"`:''}>${cur.high}</span><span class="hb-who">${esc(byId(cur.highBidder).name)} va ganando</span></div>`
@@ -679,6 +682,26 @@ function bidBox(){
     :`<p class="nobudget">No le quedan cabras para subir la puja.</p>`}
     <button type="button" class="pass" data-action="pass">${esc(p.name)} pasa</button>
     <p class="passline">${passline}</p>
+    ${untouched&&contenders(S).length>1?`<button type="button" class="link-felt" data-action="reverse">Nadie la quiere: puja inversa</button>`:''}
+  </div>`;
+}
+function reverseBox(cur,p,l,min,can){
+  const pop=(lastHigh!==null&&lastHigh!==cur.high&&cur.high>0)?' pop':''; hbFrom=pop?lastHigh:null; lastHigh=cur.high;
+  const hb=cur.highBidder
+    ?`<div class="highbid"><span class="hb-amt${pop}"${pop?` data-from="${hbFrom}" data-to="${cur.high}"`:''}>${cur.high}</span><span class="hb-who">${esc(byId(cur.highBidder).name)} paga por librarse</span></div>`
+    :`<div class="highbid"><span class="hb-amt faint">0</span><span class="hb-who">Puja inversa: se paga por no quedársela</span></div>`;
+  const chips=[[1,'c1'],[5,'c5'],[10,'c10']].map(([inc,cls])=>{const amt=cur.high+inc;const ok=amt<=l;
+    return `<button type="button" class="chipbtn ${cls}" data-action="bid" data-amt="${amt}" ${ok?'':'disabled'} aria-label="Pagar ${amt}"><span class="amt">${amt}</span><span class="inc">+${inc}</span></button>`;}).join('');
+  const mustOpen=cur.high===0;
+  const paid=Object.entries(cur.bids||{}).filter(([id])=>+id!==p.id).reduce((a,[,v])=>a+v,0);
+  return `<div class="bidbox reverse">${hb}
+    <div class="turnline">${avHTML(p.name,cur.turn,'')}<span class="tl"><span>Le toca a <b>${esc(p.name)}</b></span>${l!==Infinity?`<small>le quedan ${plural(l,'cabra','cabras')}</small>`:''}</span></div>
+    ${can?`<div class="chips3">${chips}</div>
+    ${keypad?keypadHTML(min,l):`<button type="button" class="link-felt" data-action="keypad">Otra cantidad</button>`}`
+    :`<p class="nobudget">No le quedan cabras para librarse.</p>`}
+    ${mustOpen?`<p class="passline">Quien declara la puja inversa abre con al menos 1 cabra.</p>`
+      :`<button type="button" class="pass" data-action="pass">${esc(p.name)} dice basta</button>
+    <p class="passline">Si dice basta, se queda a ${esc(cur.name)} sin pagar${paid?` y los demás pierden ${plural(paid,'cabra','cabras')}`:''}.</p>`}
   </div>`;
 }
 function stripHTML(){
@@ -686,6 +709,11 @@ function stripHTML(){
   return `<div class="strip">${S.players.map((p,i)=>{
     let cls='',st='',ring='';
     if(!alive(p)){cls='is-out';st='sin cabras';}
+    else if(inBid&&cur.reverse){
+      const bid=(cur.bids||{})[p.id];
+      if(i===cur.turn){cls='is-turn';st='le toca';ring='<span class="ring" aria-hidden="true"></span>';}
+      else if(bid){cls='is-high';st=`paga ${bid}`;}
+    }
     else if(inBid){
       if(i===cur.turn){cls='is-turn';st='le toca';ring='<span class="ring" aria-hidden="true"></span>';}
       else if(cur.passed.includes(p.id)){cls='is-pass';st='ha pasado';}
@@ -696,17 +724,6 @@ function stripHTML(){
     const pct=S.budget>0?Math.max(0,Math.min(100,left(p)/S.budget*100)):100;
     return `<div class="pchip ${cls}">${ring}<span class="ph">${avHTML(p.name,i,'sm')}<span class="pn">${esc(p.name)}</span></span><span class="pm">${money}<small>${S.budget>0?'cabras':'gastadas'}</small></span><span class="gbar" aria-hidden="true"><i style="width:${pct}%"></i></span><span class="ps">${st}</span></div>`;
   }).join('')}</div>`;
-}
-function foldsHTML(){
-  const teams=`<details class="fold" data-fold="teamsOpen"${S.teamsOpen?' open':''}><summary>Equipos</summary><ul>${S.players.map(p=>`<li><b>${esc(p.name)}</b><span>${teamHTML(p)}</span></li>`).join('')}</ul></details>`;
-  const log=`<details class="fold" data-fold="logOpen"${S.logOpen?' open':''}><summary>Historial${S.log.length?` (${S.log.length})`:''}</summary><ul>${S.log.length?S.log.slice().reverse().map(e=>`<li><b>Ronda ${e.round}</b><span>${e.winner?`${esc(e.name)} para ${esc(e.winner)} por ${plural(e.price,'cabra','cabras')}`:`${esc(e.name)} queda desierta`}</span></li>`).join(''):'<li><span>Todavía no se ha cerrado ninguna puja.</span></li>'}</ul></details>`;
-  const settings=`<details class="fold" data-fold="setOpen"${S.setOpen?' open':''}><summary>Añadir o quitar</summary>
-    <form class="adder" data-form="addname"><input type="text" placeholder="Nuevo nombre" autocomplete="off" aria-label="Nuevo nombre"><button type="submit">Añadir</button></form>
-    ${S.pool.length?`<ul class="chips">${S.pool.map(p=>`<li class="chip">${esc(p.name)}<button type="button" data-action="rm-pool" data-id="${p.id}" aria-label="Quitar a ${esc(p.name)}">×</button></li>`).join('')}</ul>`:''}
-    <form class="adder" data-form="addplayer"><input type="text" placeholder="Nuevo pujador" autocomplete="off" aria-label="Nuevo pujador"><button type="submit">Añadir</button></form>
-    <p class="hint" style="margin:0 0 6px">Un pujador nuevo entra al final del turno con ${S.budget>0?plural(S.budget,'cabra','cabras'):'cabras sin límite'}.</p>
-  </details>`;
-  return teams+log+settings;
 }
 function poolHTML(){
   if(!S.pool.length) return `<div class="poolhead">En juego <span>no queda nadie</span></div>`;
@@ -771,6 +788,7 @@ function viewRules(){
     <li>En su turno, cada pujador sube la puja o pasa. Quien pasa queda fuera de ese nombre, y la puja sigue en orden entre los que quedan.</li>
     <li>Cuando solo queda uno sin pasar, se lleva el nombre y paga las cabras de su puja, que desaparecen. Si pasan todos sin pujar, el nombre vuelve a la lista.</li>
     <li>El siguiente nombre lo abre quien va detrás del que abrió el anterior. Quien se queda a 0 cabras deja de pujar, pero sigue en la partida con su equipo.</li>
+    <li>Si quien abre no la quiere, puede declarar <b>puja inversa</b>: abre con al menos 1 cabra y cada uno paga por librarse subiendo la cantidad anterior. El primero que dice basta se la queda sin pagar; los demás pierden lo que pujaron.</li>
     <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 (con medios puntos) los equipos de los demás. Gana el equipo con mejor media.</li>
   </ol></div>
   <button type="button" class="ghost big" data-action="home">Volver</button>`;
@@ -804,7 +822,7 @@ function tabsHTML(){
 }
 function tabBodyHTML(){
   if(tab==='equipos') return `<div class="card"><ul class="teamlist">${S.players.map((p,i)=>`<li>${avHTML(p.name,i,'')}<div class="ti"><b>${esc(p.name)}</b><span>${teamHTML(p)}</span></div></li>`).join('')}</ul></div>`;
-  if(tab==='historial') return `<div class="card">${S.log.length?`<ul class="loglist">${S.log.slice().reverse().map(e=>`<li><b>Ronda ${e.round}</b><span>${e.winner?`${esc(e.name)} para ${esc(e.winner)} por ${plural(e.price,'cabra','cabras')}`:`${esc(e.name)} queda desierta`}</span></li>`).join('')}</ul>`:`<p class="hint" style="margin:0">Todavía no se ha cerrado ninguna puja.</p>`}</div>`;
+  if(tab==='historial') return `<div class="card">${S.log.length?`<ul class="loglist">${S.log.slice().reverse().map(e=>`<li><b>Ronda ${e.round}</b><span>${e.reverse?`${esc(e.name)} se la queda ${esc(e.winner)} (inversa, los demás pagan ${plural(e.paid||0,'cabra','cabras')})`:e.winner?`${esc(e.name)} para ${esc(e.winner)} por ${plural(e.price,'cabra','cabras')}`:`${esc(e.name)} queda desierta`}</span></li>`).join('')}</ul>`:`<p class="hint" style="margin:0">Todavía no se ha cerrado ninguna puja.</p>`}</div>`;
   if(tab==='mas') return `<div class="more">
     <div class="card"><div class="blockhead"><h2>Añadir sobre la marcha</h2></div>
       <form class="adder" data-form="addname"><input type="text" placeholder="Nuevo nombre" autocomplete="off" aria-label="Nuevo nombre"><button type="submit">Añadir</button></form>
@@ -828,17 +846,17 @@ function viewPlay(){
   }else if(S.phase==='bid'){
     const mini=wheelSVG(true);
     const rev=revealNext?' reveal':''; revealNext=false;
-    stage=`<div class="stage-top left">${mini}<span class="sub">Sale a subasta</span></div>
+    stage=`<div class="stage-top left">${mini}<span class="sub">${cur.reverse?'Puja inversa':'Sale a subasta'}</span></div>
       <div class="big-name${rev}">${esc(cur.name)}</div>
       ${bidBox()}`;
   }else{
     const w=cur.winner?byId(cur.winner):null, over=!S.pool.length||!anyAlive();
-    let line=w?`Para ${esc(w.name)}, por ${plural(cur.price,'cabra','cabras')}.`:'Nadie ha pujado. Vuelve a la lista.';
+    let line=cur.reverse&&w?`Se la queda ${esc(w.name)} sin pagar.${cur.paid?` Los demás pierden ${plural(cur.paid,'cabra','cabras')}.`:''}`:w?`Para ${esc(w.name)}, por ${plural(cur.price,'cabra','cabras')}.`:'Nadie ha pujado. Vuelve a la lista.';
     if(w&&!alive(w)) line+=` ${esc(w.name)} se queda sin cabras.`;
     if(!anyAlive()) line+=' Nadie tiene cabras: se acaba la partida.';
     else if(!over) line+=` Abre la siguiente ${esc(starter.name)}.`;
     stage=`<div class="big-name">${esc(cur.name)}</div>
-      <div class="stampwrap"><span class="stamp${w?'':' red'}">${w?'Adjudicado':'Desierta'}</span></div>
+      <div class="stampwrap"><span class="stamp${w?'':' red'}">${cur.reverse?'Se la queda':w?'Adjudicado':'Desierta'}</span></div>
       <p class="sub">${line}</p>
       <div class="stage-actions"><button type="button" class="primary pill" data-action="next">${over?'Valorar los equipos':'Siguiente nombre'}</button></div>`;
   }
@@ -993,6 +1011,18 @@ function closeAuction(s){
   s.nextStart=(cur.opener+1)%s.players.length; s.round++; s.phase='sold';
   snd.sold(); buzz(40); celebrate=true;
 }
+// Puja inversa: la declara quien abre. Cada uno paga por librarse subiendo la cantidad anterior;
+// el primero que dice basta se queda con el nombre sin pagar y los demás pierden lo que pujaron.
+function closeReverse(s,loserIdx){
+  const cur=s.current, loser=s.players[loserIdx]; let paid=0;
+  Object.entries(cur.bids||{}).forEach(([pid,amt])=>{if(+pid!==loser.id){const q=byId(+pid);if(q){q.spent+=amt;paid+=amt;}}});
+  loser.won.push({name:cur.name,price:0,reverse:true});
+  s.pool=s.pool.filter(p=>p.id!==cur.poolId);
+  cur.winner=loser.id; cur.price=0; cur.paid=paid;
+  s.log.push({round:s.round+1,name:cur.name,winner:loser.name,price:0,reverse:true,paid});
+  s.nextStart=(cur.opener+1)%s.players.length; s.round++; s.phase='sold';
+  snd.sold(); buzz(40); celebrate=true;
+}
 function placeBid(amt){
   const cur=S.current; if(!cur||S.phase!=='bid') return;
   const p=S.players[cur.turn];
@@ -1001,15 +1031,24 @@ function placeBid(amt){
   set(s=>{
     pushHist();
     cur.high=amt; cur.highBidder=p.id;
+    if(cur.reverse){
+      cur.bids=cur.bids||{}; cur.bids[p.id]=amt;
+      const nx=nextAlive(cur.turn);
+      if(nx===-1||nx===cur.turn) closeReverse(s,(cur.turn+1)%s.players.length);
+      else {cur.turn=nx; snd.bid();}
+      return;
+    }
     if(contenders(s).length<=1) closeAuction(s);
     else {cur.turn=nextInAuction(s,cur.turn); snd.bid();}
   });
 }
 function passTurn(){
   const cur=S.current; if(!cur||S.phase!=='bid') return;
+  if(cur.reverse&&cur.high===0) return;
   keypad=false; keyBuf='';
   set(s=>{
     pushHist();
+    if(cur.reverse){closeReverse(s,cur.turn);return;}
     const i=cur.turn;
     cur.passed.push(s.players[i].id); snd.pass();
     const rest=contenders(s);
@@ -1098,6 +1137,7 @@ app.addEventListener('click',e=>{
       } break;
     case 'bidexact': if(keyBuf) placeBid(parseInt(keyBuf,10)); break;
     case 'pass': passTurn(); break;
+    case 'reverse': if(S.phase==='bid'&&S.current&&!S.current.reverse&&S.current.high===0&&!S.current.passed.length){set(s=>{pushHist();s.current.reverse=true;s.current.bids={};});toast('Puja inversa: se paga por librarse');} break;
     case 'next': nextName(); break;
     case 'undo': undo(); break;
     case 'finish': confirming=null; set(s=>{pushHist();s.current=null;s.phase='rate';s.ratings={};s.rateIdx=0;}); window.scrollTo(0,0); break;
