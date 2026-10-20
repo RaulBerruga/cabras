@@ -307,6 +307,10 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .scores{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:12px}
 .scores button{padding:11px 0;font-weight:700;font-variant-numeric:tabular-nums;transition:transform .15s cubic-bezier(.2,1.4,.4,1),background .15s}
 .scores button.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);transform:scale(1.1);box-shadow:0 4px 12px rgba(226,181,90,.35)}
+.halfrow{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.half{padding:8px 14px;border-radius:999px;font-weight:700;font-variant-numeric:tabular-nums}
+.half.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);box-shadow:0 4px 12px rgba(226,181,90,.35)}
+.scoreval{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .rate-nav{display:flex;gap:8px;margin-top:4px}
 .rate-nav .primary{flex:1}
 
@@ -361,7 +365,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.2';
+const APP_VERSION='4.3';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -767,7 +771,7 @@ function viewRules(){
     <li>En su turno, cada pujador sube la puja o pasa. Quien pasa queda fuera de ese nombre, y la puja sigue en orden entre los que quedan.</li>
     <li>Cuando solo queda uno sin pasar, se lleva el nombre y paga las cabras de su puja, que desaparecen. Si pasan todos sin pujar, el nombre vuelve a la lista.</li>
     <li>El siguiente nombre lo abre quien va detrás del que abrió el anterior. Quien se queda a 0 cabras deja de pujar, pero sigue en la partida con su equipo.</li>
-    <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 los equipos de los demás. Gana el equipo con mejor media.</li>
+    <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 (con medios puntos) los equipos de los demás. Gana el equipo con mejor media.</li>
   </ol></div>
   <button type="button" class="ghost big" data-action="home">Volver</button>`;
 }
@@ -844,6 +848,19 @@ function viewPlay(){
   ${tabsHTML()}
   ${tabBodyHTML()}`;
 }
+function scoreBlockHTML(t,v){
+  const base=v?Math.floor(v):null, half=!!v&&v%1!==0;
+  return `<div class="scorebox" data-tid="${t.id}">
+    <div class="scores" role="group" aria-label="Nota para el equipo de ${esc(t.name)}">${Array.from({length:10},(_,i)=>i+1).map(n=>`<button type="button" data-action="score" data-id="${t.id}" data-v="${n}" class="${base===n?'on':''}" aria-pressed="${base===n}">${n}</button>`).join('')}</div>
+    <div class="halfrow"><button type="button" class="half ${half?'on':''}" data-action="half" data-id="${t.id}" ${base===null||base===10?'disabled':''} aria-pressed="${half}">+ 0,5</button><span class="scoreval">${v?fmtAvg(v):'Sin nota'}</span></div>
+  </div>`;
+}
+function setScore(tid,v){
+  const r=S.players[S.rateIdx]; (S.ratings[r.id]=S.ratings[r.id]||{})[tid]=v; save();
+  const t=byId(tid), box=app.querySelector(`.scorebox[data-tid="${tid}"]`); if(t&&box) box.outerHTML=scoreBlockHTML(t,v);
+  const d=rateDone(), nb=app.querySelector('[data-action="rate-next"]'), hnt=app.querySelector('.rate-hint');
+  if(nb) nb.disabled=!d; if(hnt) hnt.hidden=d; snd.tick();
+}
 function rateDone(){const r=S.players[S.rateIdx];const m=S.ratings[r.id]||{};return S.players.filter(p=>p.id!==r.id).every(p=>m[p.id]);}
 function viewRate(){
   const rater=S.players[S.rateIdx], mine=S.ratings[rater.id]||{};
@@ -857,7 +874,7 @@ function viewRate(){
   <section class="card own"><div class="pname">Equipo de ${esc(rater.name)}</div><div class="won">${teamHTML(rater)}</div></section>
   ${targets.map((t,i)=>`<section class="card rate in" style="--i:${i}">
     <div class="rt">${avHTML(t.name,idx(t),'')}<div class="pinfo"><div class="pname">Equipo de ${esc(t.name)}</div><div class="won">${teamHTML(t)}</div></div></div>
-    <div class="scores" role="group" aria-label="Nota para el equipo de ${esc(t.name)}">${Array.from({length:10},(_,i)=>i+1).map(v=>`<button type="button" data-action="score" data-id="${t.id}" data-v="${v}" class="${mine[t.id]===v?'on':''}" aria-pressed="${mine[t.id]===v}">${v}</button>`).join('')}</div>
+    ${scoreBlockHTML(t,mine[t.id])}
   </section>`).join('')}
   <div class="rate-nav">${S.rateIdx>0?`<button type="button" class="ghost" data-action="rate-prev">Anterior</button>`:''}<button type="button" class="primary big" data-action="rate-next" ${done?'':'disabled'}>${last?'Ver el recuento':`Siguiente: ${esc(next.name)}`}</button></div>
   <p class="hint center rate-hint"${done?' hidden':''}>Pon nota a todos los equipos para continuar.</p>
@@ -898,7 +915,7 @@ function viewEnd(){
   <ol class="ranking">${rs.map((r,i)=>`<li class="card${r.avg>0&&r.avg===top.avg?' top':''}" style="--i:${i}">
     <div class="rank-head"><span class="pos">${i+1}</span>${avHTML(r.p.name,idx(r.p),'')}<div class="pinfo"><div class="pname">${esc(r.p.name)}</div><div class="won">${teamHTML(r.p)}</div></div><div class="score"><span class="avg">${fmtAvg(r.avg)}</span><span class="of">media</span></div></div>
     <div class="meter" aria-hidden="true"><i style="width:${r.avg*10}%"></i></div>
-    <div class="votes">${r.scores.map(s=>`<span>${esc(s.from)}: ${s.v}</span>`).join('')}<span>${plural(r.p.won.length,'fichaje','fichajes')}, ${plural(r.p.spent,'cabra','cabras')}</span></div>
+    <div class="votes">${r.scores.map(s=>`<span>${esc(s.from)}: ${String(s.v).replace('.',',')}</span>`).join('')}<span>${plural(r.p.won.length,'fichaje','fichajes')}, ${plural(r.p.spent,'cabra','cabras')}</span></div>
   </li>`).join('')}</ol>
   ${factsHTML()}
   <button type="button" class="primary big" data-action="share">Compartir el recuento</button>
@@ -1086,10 +1103,12 @@ app.addEventListener('click',e=>{
     case 'finish': confirming=null; set(s=>{pushHist();s.current=null;s.phase='rate';s.ratings={};s.rateIdx=0;}); window.scrollTo(0,0); break;
     /* rating + results */
     case 'score': if(S.phase==='rate'){
-        const r=S.players[S.rateIdx];(S.ratings[r.id]=S.ratings[r.id]||{})[id]=+b.dataset.v;save();
-        b.parentElement.querySelectorAll('button').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on);});
-        const d=rateDone(), nb=app.querySelector('[data-action="rate-next"]'), h=app.querySelector('.rate-hint');
-        if(nb) nb.disabled=!d; if(h) h.hidden=d; snd.tick();
+        const r=S.players[S.rateIdx], prev=(S.ratings[r.id]||{})[id]||0, n=+b.dataset.v;
+        setScore(id, n+((prev%1!==0&&n<10)?0.5:0));
+      } break;
+    case 'half': if(S.phase==='rate'){
+        const r=S.players[S.rateIdx], prev=(S.ratings[r.id]||{})[id]||0;
+        if(prev>=1&&prev<10) setScore(id, prev%1!==0?Math.floor(prev):Math.floor(prev)+0.5);
       } break;
     case 'rate-next': if(S.phase==='rate'&&rateDone()){set(s=>{if(s.rateIdx>=s.players.length-1){s.phase='end';celebrate=true;}else{s.rateIdx++;}});window.scrollTo(0,0);} break;
     case 'rate-prev': if(S.phase==='rate'&&S.rateIdx>0){set(s=>{s.rateIdx--;});window.scrollTo(0,0);} break;
