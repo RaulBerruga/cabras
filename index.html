@@ -317,8 +317,9 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .scores button{padding:11px 0;font-weight:700;font-variant-numeric:tabular-nums;transition:transform .15s cubic-bezier(.2,1.4,.4,1),background .15s}
 .scores button.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);transform:scale(1.1);box-shadow:0 4px 12px rgba(226,181,90,.35)}
 .halfrow{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
-.half{padding:8px 14px;border-radius:999px;font-weight:700;font-variant-numeric:tabular-nums}
-.half.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);box-shadow:0 4px 12px rgba(226,181,90,.35)}
+.fracs{display:inline-flex;gap:6px}
+.frac{padding:8px 10px;border-radius:999px;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+.frac.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);box-shadow:0 4px 12px rgba(226,181,90,.35)}
 .scoreval{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .rate-nav{display:flex;gap:8px;margin-top:4px}
 .rate-nav .primary{flex:1}
@@ -374,7 +375,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.7';
+const APP_VERSION='4.8';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -410,7 +411,8 @@ function contenders(s){return s.players.filter(p=>alive(p)&&!s.current.passed.in
 function nextInAuction(s,from){const n=s.players.length;for(let k=1;k<=n;k++){const i=(from+k)%n;const p=s.players[i];if(alive(p)&&!s.current.passed.includes(p.id))return i;}return -1;}
 function plural(n,s,p){return n+' '+(n===1?s:p);}
 function teamHTML(p){return p.won.length?p.won.map(w=>`${esc(w.name)} (${w.reverse?'inversa':w.price})`).join(', '):'Sin nadie todavía';}
-function fmtAvg(v){return v.toFixed(1).replace('.',',');}
+function fmtAvg(v){let s=(Math.round(v*100)/100).toFixed(2);if(s.endsWith('0'))s=s.slice(0,-1);return s.replace('.',',');}
+function fmtScore(v){if(v==null)return '';const r=Math.round(v*100)/100;if(r%1===0)return String(r);return r.toFixed(2).replace(/0$/,'').replace('.',',');}
 function gameCount(){try{return parseInt(localStorage.getItem('cabras-gamecount')||'0',10)||0;}catch(e){return 0;}}
 function nextGameNumber(){const cloud=(saved&&user)?saved.filter(x=>!user||!x.user_id||x.user_id===user.id).length:0;return Math.max(cloud,gameCount())+1;}
 function defaultTitle(){return 'Partida '+nextGameNumber();}
@@ -453,7 +455,7 @@ function cloudBoot(){
 }
 function cloudSaveable(){return !!(S.cloudId&&(inProgress()||S.phase==='end'));}
 function scheduleSync(){if(!sb||!user||!cloudSaveable())return;dirty=true;clearTimeout(syncTimer);syncTimer=setTimeout(flush,1200);}
-function resumenData(){return results().map((r,i)=>({puesto:i+1,nombre:r.p.name,media:Math.round(r.avg*10)/10,equipo:r.p.won,gastadas:r.p.spent}));}
+function resumenData(){return results().map((r,i)=>({puesto:i+1,nombre:r.p.name,media:Math.round(r.avg*100)/100,equipo:r.p.won,gastadas:r.p.spent}));}
 function rowNow(){return {id:S.cloudId,fase:S.phase,estado:JSON.parse(snap()),resumen:S.phase==='end'?resumenData():null,actualizada:new Date().toISOString()};}
 function setSync(st,msg){const changed=st!==syncState||msg!==syncMsg;syncState=st;syncMsg=msg||'';if(changed){const el=document.getElementById('sync');if(el){el.outerHTML=syncHTML();}}}
 async function flush(){
@@ -801,7 +803,7 @@ function viewRules(){
     <li>Cuando solo queda uno sin pasar, se lleva el nombre y paga las cabras de su puja, que desaparecen. Si pasan todos sin pujar, el nombre vuelve a la lista.</li>
     <li>El siguiente nombre lo abre quien va detrás del que abrió el anterior. Quien se queda a 0 cabras deja de pujar, pero sigue en la partida con su equipo.</li>
     <li>Si la partida se juega con <b>puja inversa</b> y quien abre no la quiere, puede declararla: abre con al menos 1 cabra y cada uno paga por librarse subiendo la cantidad anterior. El primero que dice basta se la queda sin pagar; los demás pierden lo que pujaron.</li>
-    <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 (con medios puntos) los equipos de los demás. Gana el equipo con mejor media.</li>
+    <li>Al acabarse los nombres (o las cabras), cada pujador puntúa de 1 a 10 (con cuartos de punto: ,25, ,5 y ,75) los equipos de los demás. Gana el equipo con mejor media.</li>
   </ol></div>
   <button type="button" class="ghost big" data-action="home">Volver</button>`;
 }
@@ -887,10 +889,11 @@ function viewPlay(){
   ${tabBodyHTML()}`;
 }
 function scoreBlockHTML(t,v){
-  const base=v?Math.floor(v):null, half=!!v&&v%1!==0;
+  const base=v?Math.floor(v):null, frac=v?Math.round((v-Math.floor(v))*100)/100:0;
+  const fr=[[0.25,'+ 0,25'],[0.5,'+ 0,5'],[0.75,'+ 0,75']].map(([f,l])=>`<button type="button" class="frac ${frac===f?'on':''}" data-action="frac" data-id="${t.id}" data-f="${f}" ${base===null||base===10?'disabled':''} aria-pressed="${frac===f}">${l}</button>`).join('');
   return `<div class="scorebox" data-tid="${t.id}">
     <div class="scores" role="group" aria-label="Nota para el equipo de ${esc(t.name)}">${Array.from({length:10},(_,i)=>i+1).map(n=>`<button type="button" data-action="score" data-id="${t.id}" data-v="${n}" class="${base===n?'on':''}" aria-pressed="${base===n}">${n}</button>`).join('')}</div>
-    <div class="halfrow"><button type="button" class="half ${half?'on':''}" data-action="half" data-id="${t.id}" ${base===null||base===10?'disabled':''} aria-pressed="${half}">+ 0,5</button><span class="scoreval">${v?fmtAvg(v):'Sin nota'}</span></div>
+    <div class="halfrow"><span class="fracs" role="group" aria-label="Decimales">${fr}</span><span class="scoreval">${v?fmtScore(v):'Sin nota'}</span></div>
   </div>`;
 }
 function setScore(tid,v){
@@ -953,7 +956,7 @@ function viewEnd(){
   <ol class="ranking">${rs.map((r,i)=>`<li class="card${r.avg>0&&r.avg===top.avg?' top':''}" style="--i:${i}">
     <div class="rank-head"><span class="pos">${i+1}</span>${avHTML(r.p.name,idx(r.p),'')}<div class="pinfo"><div class="pname">${esc(r.p.name)}</div><div class="won">${teamHTML(r.p)}</div></div><div class="score"><span class="avg">${fmtAvg(r.avg)}</span><span class="of">media</span></div></div>
     <div class="meter" aria-hidden="true"><i style="width:${r.avg*10}%"></i></div>
-    <div class="votes">${r.scores.map(s=>`<span>${esc(s.from)}: ${String(s.v).replace('.',',')}</span>`).join('')}<span>${plural(r.p.won.length,'fichaje','fichajes')}, ${plural(r.p.spent,'cabra','cabras')}</span></div>
+    <div class="votes">${r.scores.map(s=>`<span>${esc(s.from)}: ${fmtScore(s.v)}</span>`).join('')}<span>${plural(r.p.won.length,'fichaje','fichajes')}, ${plural(r.p.spent,'cabra','cabras')}</span></div>
   </li>`).join('')}</ol>
   ${factsHTML()}
   <button type="button" class="primary big" data-action="share">Compartir el recuento</button>
@@ -1165,11 +1168,12 @@ app.addEventListener('click',e=>{
     /* rating + results */
     case 'score': if(S.phase==='rate'){
         const r=S.players[S.rateIdx], prev=(S.ratings[r.id]||{})[id]||0, n=+b.dataset.v;
-        setScore(id, n+((prev%1!==0&&n<10)?0.5:0));
+        const frac=Math.round((prev-Math.floor(prev))*100)/100;
+        setScore(id, n+((frac&&n<10)?frac:0));
       } break;
-    case 'half': if(S.phase==='rate'){
-        const r=S.players[S.rateIdx], prev=(S.ratings[r.id]||{})[id]||0;
-        if(prev>=1&&prev<10) setScore(id, prev%1!==0?Math.floor(prev):Math.floor(prev)+0.5);
+    case 'frac': if(S.phase==='rate'){
+        const r=S.players[S.rateIdx], prev=(S.ratings[r.id]||{})[id]||0, f=+b.dataset.f;
+        if(prev>=1&&prev<10){const base=Math.floor(prev), cur=Math.round((prev-base)*100)/100; setScore(id, base+(cur===f?0:f));}
       } break;
     case 'rate-next': if(S.phase==='rate'&&rateDone()){set(s=>{if(s.rateIdx>=s.players.length-1){s.phase='end';celebrate=true;}else{s.rateIdx++;}});window.scrollTo(0,0);} break;
     case 'rate-prev': if(S.phase==='rate'&&S.rateIdx>0){set(s=>{s.rateIdx--;});window.scrollTo(0,0);} break;
