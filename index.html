@@ -375,7 +375,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.9.1';
+const APP_VERSION='4.9.2';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -420,6 +420,7 @@ function titleOf(e){return (e&&e.title)||'';}
 function inProgress(){return ['pick','bid','sold','rate'].includes(S.phase);}
 function inGame(){return ['pick','bid','sold'].includes(S.phase)&&!view;}
 const PAL=[['#2E7A5E','#F3E9CF'],['#D1413A','#F3E9CF'],['#E2B55A','#2A1E07'],['#3B6EA8','#F3E9CF'],['#8E4EA3','#F3E9CF'],['#D97A2B','#2A1E07'],['#2A9D8F','#F3E9CF'],['#B5485D','#F3E9CF']];
+function normName(n){return String(n).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function initials(n){return String(n).trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';}
 function avHTML(name,i,cls){const [bg,fg]=PAL[((i%PAL.length)+PAL.length)%PAL.length];return `<span class="av ${cls||''}" style="background:${bg};color:${fg}" aria-hidden="true">${esc(initials(name))}</span>`;}
 function avsHTML(names,cls){return `<span class="avs">${names.slice(0,5).map((n,i)=>avHTML(n,i,cls||'sm')).join('')}</span>`;}
@@ -1194,8 +1195,14 @@ app.addEventListener('submit',e=>{
   const f=e.target, kind=f.dataset.form;
   if(kind==='auth'){doAuth(authMode==='signup'?'signup':'login',f.elements.email.value.trim(),f.elements.pass.value);return;}
   const inp=f.querySelector('input'), v=inp.value.trim();
-  const names=v.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
+  let names=v.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
   if(!names.length) return;
+  // Sin repetidos: ni dentro de lo escrito ni con lo que ya hay (sin distinguir mayúsculas ni tildes)
+  const existing=(kind==='pool'||kind==='addname')?[...S.pool.map(p=>p.name),...(kind==='addname'?S.players.flatMap(p=>p.won.map(w=>w.name)):[])]:S.players.map(p=>p.name);
+  const seen=new Set(existing.map(normName)), dupes=[];
+  names=names.filter(n=>{const k=normName(n);if(seen.has(k)){dupes.push(n);return false;}seen.add(k);return true;});
+  if(dupes.length) toast(dupes.length===1?`${dupes[0]} ya está en la lista`:`Repetidos, no se añaden: ${dupes.join(', ')}`);
+  if(!names.length){inp.value='';return;}
   const focus=()=>{const nf=app.querySelector(`form[data-form="${kind}"] input`);if(nf)nf.focus();};
   if(kind==='pool') set(s=>{names.forEach(n=>s.pool.push({id:uid(),name:n}));},focus);
   else if(kind==='players') set(s=>{names.forEach(n=>s.players.push({id:uid(),name:n,spent:0,won:[]}));},focus);
