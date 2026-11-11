@@ -295,6 +295,8 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .loglist li{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px;align-items:baseline}
 .loglist li:first-child{border-top:0;padding-top:0}
 .loglist b{flex:0 0 68px;color:var(--mute);font-weight:700}
+.loglist li span{flex:1}
+.loglist .pujas{display:block;margin-top:3px;color:var(--mute);font-size:12px;line-height:1.4}
 .poolhead{display:flex;align-items:baseline;justify-content:center;gap:8px;font-weight:700;font-size:15px;margin:4px 0 8px}
 .poolhead span{color:var(--mute);font-weight:500;font-size:13px}
 .poolchips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
@@ -375,7 +377,7 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 <noscript><p style="padding:20px">Esta app necesita JavaScript.</p></noscript>
 <script>
 (function(){
-const APP_VERSION='4.8';
+const APP_VERSION='4.9';
 const KEY='cabras-v2', OLDKEYS=['cabras-v1','subasta-v1'];
 const SAMPLE={names:['Marta','Pablo','Lucía','Hugo','Carla','Dani','Sofía','Mateo'],players:['Álvaro','Nerea','Jorge']};
 const reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -842,7 +844,7 @@ function tabsHTML(){
 }
 function tabBodyHTML(){
   if(tab==='equipos') return `<div class="card"><ul class="teamlist">${S.players.map((p,i)=>`<li>${avHTML(p.name,i,'')}<div class="ti"><b>${esc(p.name)}</b><span>${teamHTML(p)}</span></div></li>`).join('')}</ul></div>`;
-  if(tab==='historial') return `<div class="card">${S.log.length?`<ul class="loglist">${S.log.slice().reverse().map(e=>`<li><b>Ronda ${e.round}</b><span>${e.reverse?`${esc(e.name)} se la queda ${esc(e.winner)} (inversa, los demás pagan ${plural(e.paid||0,'cabra','cabras')})`:e.winner?`${esc(e.name)} para ${esc(e.winner)} por ${plural(e.price,'cabra','cabras')}`:`${esc(e.name)} queda desierta`}</span></li>`).join('')}</ul>`:`<p class="hint" style="margin:0">Todavía no se ha cerrado ninguna puja.</p>`}</div>`;
+  if(tab==='historial') return `<div class="card">${S.log.length?`<ul class="loglist">${S.log.slice().reverse().map(e=>`<li><b>Ronda ${e.round}</b><span>${e.reverse?`${esc(e.name)} se la queda ${esc(e.winner)} (inversa, los demás pagan ${plural(e.paid||0,'cabra','cabras')})`:e.winner?`${esc(e.name)} para ${esc(e.winner)} por ${plural(e.price,'cabra','cabras')}`:`${esc(e.name)} queda desierta`}${e.pujas&&e.pujas.length?`<small class="pujas">${e.pujas.map(x=>x.pass?`${esc(x.p)} pasa`:`${esc(x.p)} ${x.a}`).join(' · ')}</small>`:''}</span></li>`).join('')}</ul>`:`<p class="hint" style="margin:0">Todavía no se ha cerrado ninguna puja.</p>`}</div>`;
   if(tab==='mas') return `<div class="more">
     <div class="card"><div class="blockhead"><h2>Añadir sobre la marcha</h2></div>
       <form class="adder" data-form="addname"><input type="text" placeholder="Nuevo nombre" autocomplete="off" aria-label="Nuevo nombre"><button type="submit">Añadir</button></form>
@@ -1017,7 +1019,7 @@ function startBidding(i,extra){
   set(s=>{
     pushHist();
     const item=s.pool[i], t=firstAliveFrom(s.nextStart);
-    s.current={poolId:item.id,name:item.name,high:0,highBidder:null,turn:t<0?0:t,opener:t<0?0:t,passed:[],winner:null,price:0};
+    s.current={poolId:item.id,name:item.name,high:0,highBidder:null,turn:t<0?0:t,opener:t<0?0:t,passed:[],winner:null,price:0,seq:[]};
     s.phase='bid';
   });
 }
@@ -1030,7 +1032,7 @@ function closeAuction(s){
   w.spent+=cur.high; w.won.push({name:cur.name,price:cur.high});
   s.pool=s.pool.filter(p=>p.id!==cur.poolId);
   cur.winner=w.id; cur.price=cur.high;
-  s.log.push({round:s.round+1,name:cur.name,winner:w.name,price:cur.high});
+  s.log.push({round:s.round+1,name:cur.name,winner:w.name,price:cur.high,pujas:cur.seq||[]});
   s.nextStart=(cur.opener+1)%s.players.length; s.round++; s.phase='sold';
   snd.sold(); buzz(40); celebrate=true;
 }
@@ -1042,7 +1044,7 @@ function closeReverse(s,loserIdx){
   loser.won.push({name:cur.name,price:0,reverse:true});
   s.pool=s.pool.filter(p=>p.id!==cur.poolId);
   cur.winner=loser.id; cur.price=0; cur.paid=paid;
-  s.log.push({round:s.round+1,name:cur.name,winner:loser.name,price:0,reverse:true,paid});
+  s.log.push({round:s.round+1,name:cur.name,winner:loser.name,price:0,reverse:true,paid,pujas:cur.seq||[]});
   s.nextStart=(cur.opener+1)%s.players.length; s.round++; s.phase='sold';
   snd.sold(); buzz(40); celebrate=true;
 }
@@ -1054,6 +1056,7 @@ function placeBid(amt){
   set(s=>{
     pushHist();
     cur.high=amt; cur.highBidder=p.id;
+    (cur.seq=cur.seq||[]).push({p:p.name,a:amt});
     if(cur.reverse){
       cur.bids=cur.bids||{}; cur.bids[p.id]=amt;
       const nx=nextAlive(cur.turn);
@@ -1071,12 +1074,13 @@ function passTurn(){
   keypad=false; keyBuf='';
   set(s=>{
     pushHist();
+    (cur.seq=cur.seq||[]).push({p:s.players[cur.turn].name,pass:true});
     if(cur.reverse){closeReverse(s,cur.turn);return;}
     const i=cur.turn;
     cur.passed.push(s.players[i].id); snd.pass();
     const rest=contenders(s);
     if(cur.highBidder&&rest.length===1&&rest[0].id===cur.highBidder){closeAuction(s);return;}
-    if(!rest.length){cur.winner=null;s.log.push({round:s.round+1,name:cur.name,winner:null,price:0});s.nextStart=(cur.opener+1)%s.players.length;s.round++;s.phase='sold';return;}
+    if(!rest.length){cur.winner=null;s.log.push({round:s.round+1,name:cur.name,winner:null,price:0,pujas:cur.seq||[]});s.nextStart=(cur.opener+1)%s.players.length;s.round++;s.phase='sold';return;}
     cur.turn=nextInAuction(s,i);
   });
 }
